@@ -1,19 +1,11 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <pthread.h>
-
-struct t_struct {
-  int index;
-  int num_simulations;
-  unsigned int* seeds;
-};
-
-#define SIMULATIONS 100000000
+#include <sys/time.h>
 
 int is_in_circle(double x, double y) {
-  double distance = sqrt((x * x) + (y * y));
+  double distance = x * x + y * y;
 
   if (distance > 1.0) {
     return 0;
@@ -22,13 +14,19 @@ int is_in_circle(double x, double y) {
   }
 }
 
-void *calculate(void *arg) {
-  struct t_struct* info = (struct t_struct *) arg;
-  int simulations = info->num_simulations;
+void *simulate(void *arg) {
+  struct drand48_data rbuffer;
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  srand48_r(tv.tv_usec, &rbuffer); // seed thread-safe PRNG
+
+  long int simulations = (long int) arg;
   long int count = 0;
+
+  double x, y;
   for (int i = 0; i < simulations; i++) {
-    double x = (double) rand_r(&info->seeds[info->index]) / RAND_MAX;
-    double y = (double) rand_r(&info->seeds[info->index]) / RAND_MAX;
+    drand48_r(&rbuffer, &x);
+    drand48_r(&rbuffer, &y);
 
     if (is_in_circle(x, y)) {
       count++;
@@ -37,48 +35,38 @@ void *calculate(void *arg) {
   return (void*) count;
 }
 
-int main() {
+int main(int argc, char * argv[]) {
   long int total = 0;
   void* ret;
-  int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
-  unsigned int thread_seeds[num_cpus];
-  for (int i = 0; i < num_cpus; i++) {
-    thread_seeds[i] = rand();
-  }
+  int simulations = atoi(argv[1]);
+  int num_threads = atoi(argv[2]);
 
-  pthread_t threads[num_cpus];
+  pthread_t threads[num_threads];
 
   int rc;
-  int simulations_per_cpu = SIMULATIONS / num_cpus;
-  int simulations_last_cpu = simulations_per_cpu + SIMULATIONS % num_cpus;
+  long int simulations_per_thread = simulations / num_threads;
+  long int simulations_last_thread = simulations_per_thread + simulations % num_threads;
 
-  for (int i = 0; i < num_cpus; i++) {
-    struct t_struct* info = malloc(sizeof(struct t_struct));
-    info->index = i;
-    info->seeds = thread_seeds;
-
-    if (i == num_cpus - 1) {
-      info->num_simulations = simulations_last_cpu;
+  for (int i = 0; i < num_threads; i++) {
+    if (i == num_threads - 1) {
+      rc = pthread_create(&threads[i], NULL, simulate, (void *) simulations_last_thread);
     } else {
-      info->num_simulations = simulations_per_cpu;
+      rc = pthread_create(&threads[i], NULL, simulate, (void *) simulations_per_thread);
     }
-
-    rc = pthread_create(&threads[i], NULL, calculate,(void *) info);
 
     if (rc) {
       printf("ERROR return code from pthread_create(): %d\n", rc);
       exit(-1);
     }
-    free(info);
   }
 
-  for (int i = 0; i < num_cpus; i++) {
+  for (int i = 0; i < num_threads; i++) {
     pthread_join(threads[i], &ret);
     total += (long int) ret;
   }
 
-  double pi = ((double) total / SIMULATIONS) * 4.0;
+  double pi = ((double) total / simulations) * 4.0;
   printf("%.10f\n", pi);
 
   return 0;

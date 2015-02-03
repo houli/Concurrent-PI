@@ -2,10 +2,8 @@
 #include <math.h>
 #include <stdlib.h>
 
-#define SIMULATIONS 100000000
-
 int is_in_circle(double x, double y) {
-  double distance = sqrt((x * x) + (y * y));
+  double distance = x * x + y * y;
 
   if (distance > 1.0) {
     return 0;
@@ -14,9 +12,10 @@ int is_in_circle(double x, double y) {
   }
 }
 
-int main() {
+int main(int argc, char * argv[]) {
+  int simulations = atoi(argv[1]);
   int in_circle = 0;
-  for (int i = 0; i < SIMULATIONS; i++) {
+  for (int i = 0; i < simulations; i++) {
     double x = (double) rand() / RAND_MAX;
     double y = (double) rand() / RAND_MAX;
 
@@ -24,7 +23,7 @@ int main() {
       in_circle++;
     }
   }
-  double pi = ((double) in_circle / SIMULATIONS) * 4.0;
+  double pi = ((double) in_circle / simulations) * 4.0;
   printf("%.10f\n", pi);
 
   return 0;
